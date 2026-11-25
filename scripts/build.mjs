@@ -21,7 +21,5 @@ export default { async fetch(request, env) {
 }};
 `;
 await mkdir(new URL('dist/server/', root), { recursive: true });
-await mkdir(new URL('dist/.openai/', root), { recursive: true });
 await writeFile(new URL('dist/server/index.js', root), worker);
-await writeFile(new URL('dist/.openai/hosting.json', root), await readFile(new URL('.openai/hosting.json', root)));
 console.log('Worker built, including frontend assets.');

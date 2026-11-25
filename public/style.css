@@ -35,7 +35,6 @@ img { display: block; }
 .brand { flex: 1; display: flex; gap: 9px; align-items: center; text-decoration: none; }
 .brand strong { font-size: .875rem; font-weight: 600; letter-spacing: 1px; }
 .brand img { width: 26px; height: 26px; }
-.sidebar-close { width: 28px; height: 28px; }
 .nav-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 10px; text-align: left; border-radius: 6px; font-size: .875rem; color: #5f6d64; min-height: 40px; }
 .nav-item:hover { background: #eaf0eb; }
 .nav-item.active { background: #e4ece6; color: #2e654e; }

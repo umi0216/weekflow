@@ -89,7 +89,7 @@ function render() {
   $('#app').innerHTML = `
     <div class="drawer-shade ${state.drawer ? 'open' : ''}" data-action="close-drawer"></div>
     <aside id="team-sidebar" class="sidebar ${state.drawer ? 'open' : ''}" aria-label="团队导航">
-      <div class="sidebar-heading"><a class="brand" href="#" data-action="overview"><img src="/favicon.svg" alt="" width="28" height="28"><strong>同频</strong></a><button class="icon-btn sidebar-close" data-action="close-sidebar" title="收起侧栏" aria-label="收起侧栏" aria-controls="team-sidebar">${icon('panel')}</button></div>
+      <div class="sidebar-heading"><a class="brand" href="#" data-action="overview"><img src="/favicon.svg" alt="" width="28" height="28"><strong>同频</strong></a></div>
       <button class="nav-item ${!member ? 'active' : ''}" data-action="overview" ${!member ? 'aria-current="page"' : ''}>${icon('grid')}<span>全部</span><span class="nav-count">${state.tasks.filter(t=>t.status!=='done').length || ''}</span></button>
       <div class="member-label"><span>成员</span><button class="icon-btn" data-action="add-member" title="添加成员" aria-label="添加成员">${icon('plus')}</button></div>
       <nav class="member-list" aria-label="成员">${state.members.map(m => `<button class="nav-item member-nav ${state.selected===m.id?'active':''}" data-member="${esc(m.id)}" title="${esc([m.name,m.role].filter(Boolean).join(' · '))}" ${state.selected===m.id?'aria-current="page"':''}>${avatar(m)}<span class="member-name">${esc(m.name)}</span><span class="nav-num">${state.tasks.filter(t=>t.memberId===m.id&&t.status!=='done').length || ''}</span></button>`).join('')}</nav>
@@ -182,6 +182,10 @@ function bindBoard() {
     el.ondragend=()=>{$$('.drag-over').forEach(c=>c.classList.remove('drag-over'));el.classList.remove('dragging')};
   });
   $$('.column').forEach(el=>{
+    el.ondblclick=e=>{
+      if(el.dataset.status!=='todo'||(e.target!==el&&e.target!==$('.task-stack',el)))return;
+      e.preventDefault();clearTimeout(clickTimer);window.getSelection()?.removeAllRanges();taskDialog();
+    };
     el.ondragover=e=>{e.preventDefault();e.dataTransfer.dropEffect='move';el.classList.add('drag-over')};
     el.ondragleave=e=>{if(!el.contains(e.relatedTarget))el.classList.remove('drag-over')};
     el.ondrop=e=>{e.preventDefault();el.classList.remove('drag-over');const id=e.dataTransfer.getData('text/plain');if(state.tasks.some(t=>t.id===id))moveTask(id,el.dataset.status)};
@@ -197,9 +201,9 @@ function handleAction(action) {
   else if(action==='demo')startDemo();
   else if(action==='exit-demo')exitDemo();
   else if(action==='clear-filters'){state.query='';state.week='all';render()}
-  else if(action==='toggle-sidebar'||action==='close-sidebar'){
-    if(sidebarMedia.matches)state.drawer=action==='toggle-sidebar'?!state.drawer:false;
-    else{state.sidebarCollapsed=action==='close-sidebar'?true:!state.sidebarCollapsed;store.set('sidebarCollapsed',state.sidebarCollapsed)}
+  else if(action==='toggle-sidebar'){
+    if(sidebarMedia.matches)state.drawer=!state.drawer;
+    else{state.sidebarCollapsed=!state.sidebarCollapsed;store.set('sidebarCollapsed',state.sidebarCollapsed)}
     syncSidebar();
   }
   else if(action==='open-drawer'||action==='close-drawer'){state.drawer=action==='open-drawer';syncSidebar()}

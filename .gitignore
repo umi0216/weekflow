@@ -3,5 +3,9 @@ dist/
 outputs/
 .runtime/
 .sites-runtime/
+.openai/
+.agents/
+.codex/
+.aws/
 .env*
 *.log
