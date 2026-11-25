@@ -70,7 +70,7 @@ try{
   await cdp('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});await delay(250);
   assert.equal(await evaluate(`document.documentElement.scrollWidth>window.innerWidth`),false);
   await shot('board-mobile');
-  await click('[data-action="open-drawer"]');assert.equal(await evaluate(`document.querySelector('.sidebar').classList.contains('open')`),true);await click('[data-member="demo-zhou"]');assert.equal(await evaluate(`document.querySelector('.sidebar').classList.contains('open')`),false);
+  await click('[data-action="toggle-sidebar"]');assert.equal(await evaluate(`document.querySelector('.sidebar').classList.contains('open')`),true);await click('[data-member="demo-zhou"]');assert.equal(await evaluate(`document.querySelector('.sidebar').classList.contains('open')`),false);
   await click('[data-action="add-task"]');assert.equal(await evaluate(`document.querySelector('.dialog').getBoundingClientRect().right<=window.innerWidth`),true);await shot('task-mobile');await click('[data-close]');
   await click('[data-action="exit-demo"]');await until(`!!document.querySelector('.welcome')`,'demo exit');
   assert.equal((await(await fetch('http://127.0.0.1:4173/api/state')).json()).members.length,0);

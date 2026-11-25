@@ -25,6 +25,7 @@ const icons = {
   trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>',
   mouse: '<rect x="6" y="2" width="12" height="20" rx="6"/><path d="M12 2v7M6 9h12"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M6 8v8"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.01"/>',
   spark: '<path d="m12 3 2.3 6.7L21 12l-6.7 2.3L12 21l-2.3-6.7L3 12l6.7-2.3L12 3Z"/>',
   empty: '<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M9 3h6v4H9zM8 12h8m-8 4h5"/>',
@@ -43,7 +44,8 @@ const store = {
   get(key, fallback) { try { return JSON.parse(localStorage.getItem('weekflow.' + key)) ?? fallback; } catch { return fallback; } },
   set(key, value) { try { localStorage.setItem('weekflow.' + key, JSON.stringify(value)); } catch {} }
 };
-const state = { members: [], tasks: [], selected: store.get('member', 'all'), query: '', week: 'all', group: store.get('group', true), view: store.get('view', 'board'), collapsed: new Set(), demo: false, loading: true, error: '', pending: new Set(), drawer: false };
+const state = { members: [], tasks: [], selected: store.get('member', 'all'), query: '', week: 'all', group: store.get('group', true), view: store.get('view', 'board'), collapsed: new Set(), demo: false, loading: true, error: '', pending: new Set(), drawer: false, sidebarCollapsed: store.get('sidebarCollapsed', false) === true };
+const sidebarMedia = window.matchMedia('(max-width: 700px)');
 let realData = null, clickTimer = null, toastTimer = null, dialogCleanup = null, dialogFocus = null, liveBusy = 0;
 const monday = value => { const d = new Date(value); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; };
 const dateKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -85,8 +87,8 @@ function render() {
   const member = currentMember();
   $('#app').innerHTML = `
     <div class="drawer-shade ${state.drawer ? 'open' : ''}" data-action="close-drawer"></div>
-    <aside class="sidebar ${state.drawer ? 'open' : ''}" aria-label="团队导航">
-      <a class="brand" href="#" data-action="overview"><img src="/favicon.svg" alt="" width="36" height="36"><span><strong>同频</strong><small>WEEKFLOW</small></span></a>
+    <aside id="team-sidebar" class="sidebar ${state.drawer ? 'open' : ''}" aria-label="团队导航">
+      <div class="sidebar-heading"><a class="brand" href="#" data-action="overview"><img src="/favicon.svg" alt="" width="36" height="36"><span><strong>同频</strong><small>WEEKFLOW</small></span></a><button class="icon-btn sidebar-close" data-action="close-sidebar" title="收起侧栏" aria-label="收起侧栏" aria-controls="team-sidebar">${icon('panel')}</button></div>
       <div class="workspace-switch"><span class="workspace-icon">${icon('building')}</span><span><strong>我们的工作空间</strong><small>一点一滴，一起向前</small></span></div>
       <p class="sidebar-label">WORKSPACE</p>
       <button class="nav-item ${!member ? 'active' : ''}" data-action="overview" ${!member ? 'aria-current="page"' : ''}>${icon('grid')}<span>团队总览</span><span class="nav-count">${state.members.length}</span></button>
@@ -96,11 +98,28 @@ function render() {
       <div class="sidebar-bottom"><div class="little-note">${icon('leaf')}<strong>小步向前，也很好。</strong><p>把事情记下来，<br>给专注留一点空间。</p></div><div class="internal-tag">${icon('lock')} 团队内部工作空间</div></div>
     </aside>
     <div class="shell">
-      <header class="topbar"><div class="breadcrumb"><button class="icon-btn mobile-menu" data-action="open-drawer" title="展开成员导航" aria-label="展开成员导航">${icon('menu')}</button><span>工作空间</span><span class="slash">/</span><strong>${member ? esc(member.name) + ' 的空间' : '团队总览'}</strong></div><div class="topbar-right"><span class="today">${icon('calendar')}${new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'})}</span><button class="help-btn" data-action="help" title="使用说明" aria-label="使用说明">?</button><span class="topbar-avatar" title="团队工作空间">${icon('users')}</span></div></header>
+      <header class="topbar"><div class="breadcrumb"><button class="icon-btn sidebar-toggle" data-action="toggle-sidebar" title="切换侧栏" aria-label="切换侧栏" aria-controls="team-sidebar">${icon('panel')}</button><span>工作空间</span><span class="slash">/</span><strong>${member ? esc(member.name) + ' 的空间' : '团队总览'}</strong></div><div class="topbar-right"><span class="today">${icon('calendar')}${new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'})}</span><button class="help-btn" data-action="help" title="使用说明" aria-label="使用说明">?</button><span class="topbar-avatar" title="团队工作空间">${icon('users')}</span></div></header>
       ${state.demo ? `<div class="demo-banner"><span>${icon('info')}正在浏览示例，操作不会影响真实数据。</span><button data-action="exit-demo">回到真实空间</button></div>` : ''}
       <main class="main" id="main" tabindex="-1">${mainContent(member)}</main>
     </div>`;
   bindApp();
+  syncSidebar();
+}
+function syncSidebar() {
+  const sidebar = $('#team-sidebar');
+  if (!sidebar) return;
+  const expanded = sidebarMedia.matches ? state.drawer : !state.sidebarCollapsed;
+  const hadFocus = sidebar.contains(document.activeElement);
+  document.documentElement.classList.toggle('sidebar-collapsed', state.sidebarCollapsed);
+  sidebar.classList.toggle('open', sidebarMedia.matches && state.drawer);
+  sidebar.toggleAttribute('inert', !expanded);
+  sidebar.setAttribute('aria-hidden', String(!expanded));
+  $('.drawer-shade').classList.toggle('open', sidebarMedia.matches && state.drawer);
+  const toggle = $('.sidebar-toggle');
+  toggle.setAttribute('aria-expanded', String(expanded));
+  toggle.setAttribute('aria-label', expanded ? '收起侧栏' : '展开侧栏');
+  toggle.title = expanded ? '收起侧栏' : '展开侧栏';
+  if (!expanded && hadFocus) toggle.focus();
 }
 function mainContent(member) {
   if (state.loading) return '<div class="boot" style="height:50vh">正在整理团队空间…</div>';
@@ -189,7 +208,12 @@ function handleAction(action) {
   else if(action==='demo')startDemo();
   else if(action==='exit-demo')exitDemo();
   else if(action==='clear-filters'){state.query='';state.week='all';render()}
-  else if(action==='open-drawer'||action==='close-drawer'){state.drawer=action==='open-drawer';$('.sidebar').classList.toggle('open',state.drawer);$('.drawer-shade').classList.toggle('open',state.drawer)}
+  else if(action==='toggle-sidebar'||action==='close-sidebar'){
+    if(sidebarMedia.matches)state.drawer=action==='toggle-sidebar'?!state.drawer:false;
+    else{state.sidebarCollapsed=action==='close-sidebar'?true:!state.sidebarCollapsed;store.set('sidebarCollapsed',state.sidebarCollapsed)}
+    syncSidebar();
+  }
+  else if(action==='open-drawer'||action==='close-drawer'){state.drawer=action==='open-drawer';syncSidebar()}
 }
 function advanceTask(id) {
   const task=state.tasks.find(t=>t.id===id);if(!task)return;
@@ -323,5 +347,6 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&state.drawer)handleAction('close-drawer');
 });
 window.addEventListener('focus',()=>refresh(true));
+sidebarMedia.addEventListener('change',()=>{state.drawer=false;syncSidebar()});
 setInterval(()=>{if(!document.hidden)refresh(true)},20000);
 render();refresh();
