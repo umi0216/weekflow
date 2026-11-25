@@ -1,27 +1,33 @@
 import { createServer } from 'node:http';
+import { createServer as createSecureServer } from 'node:https';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { api } from '../worker/api.mjs';
+import { resolve } from 'node:path';
 import { database } from './database.mjs';
-const port = Number(process.env.PORT || 4173);
-const host = process.env.HOST || '127.0.0.1';
-const DB = database(fileURLToPath(new URL('../.runtime/team.sqlite', import.meta.url)));
-const files = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/style.css': ['style.css', 'text/css; charset=utf-8'], '/favicon.svg': ['favicon.svg', 'image/svg+xml'] };
-const server = createServer(async (req, res) => {
+import { createLan } from './lan.mjs';
+import { createHandler } from './server.mjs';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const secure = process.argv.includes('--https') || Boolean(process.env.TLS_CERT || process.env.TLS_KEY);
+let tls;
+if (secure) {
   try {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    if (url.pathname.startsWith('/api/')) {
-      const chunks = []; let size = 0;
-      for await (const c of req) { size += c.length; if (size > 22000) { res.writeHead(413); res.end(); return; } chunks.push(c); }
-      const request = new Request(url, { method: req.method, headers: req.headers, ...(!['GET', 'HEAD'].includes(req.method) ? { body: Buffer.concat(chunks) } : {}) });
-      const response = await api(request, { DB });
-      res.writeHead(response.status, Object.fromEntries(response.headers)); res.end(Buffer.from(await response.arrayBuffer())); return;
-    }
-    const file = files[url.pathname];
-    if (!file) { res.writeHead(404); res.end('Not found'); return; }
-    const content = await readFile(new URL('../public/' + file[0], import.meta.url));
-    res.writeHead(200, { 'Content-Type': file[1], 'Cache-Control': 'no-cache' }); res.end(content);
-  } catch (error) { console.error(error); res.writeHead(500); res.end('Server error'); }
+    tls = {
+      cert: await readFile(process.env.TLS_CERT || resolve(root, '.runtime/certs/server.crt')),
+      key: await readFile(process.env.TLS_KEY || resolve(root, '.runtime/certs/server.key'))
+    };
+  } catch { console.error('未找到 HTTPS 证书。先运行 npm run cert -- 服务器的局域网IP，或设置 TLS_CERT 和 TLS_KEY。'); process.exit(1); }
+}
+const port = Number(process.env.PORT || 4173), host = process.env.HOST || '127.0.0.1';
+const DB = database(process.env.DB_PATH || resolve(root, '.runtime/team.sqlite'));
+const lan = createLan({ DB, filesDirectory: process.env.FILES_DIR || resolve(root, '.runtime/files') });
+const handler = createHandler({ DB, lan });
+const server = secure ? createSecureServer(tls, handler) : createServer(handler);
+// Large uploads stream to disk; slow or interrupted transfers never create a message.
+server.requestTimeout = 10 * 60 * 1000;
+server.listen(port, host, () => console.log(`同频已启动: ${secure ? 'https' : 'http'}://${host}:${port}`));
+for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
+  lan.close();
+  server.close(() => { DB.close(); process.exit(0); });
+  server.closeAllConnections();
 });
-server.listen(port, host, () => console.log(`同频已启动: http://${host}:${port}`));
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { DB.close(); process.exit(0); }));

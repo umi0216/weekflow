@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
-    "test": "node --test tests/api.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "dev:https": "node scripts/dev.mjs --https",
+    "cert": "node scripts/cert.mjs",
+    "test:browser": "node scripts/lan-browser-qa.mjs"
   },
-  "engines": { "node": ">=22.13.0" }
+  "engines": {
+    "node": ">=22.13.0"
+  }
 }

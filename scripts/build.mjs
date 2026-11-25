@@ -1,12 +1,13 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 const root = new URL('../', import.meta.url);
-const files = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/style.css': ['style.css', 'text/css; charset=utf-8'], '/favicon.svg': ['favicon.svg', 'image/svg+xml'] };
+const files = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/lan.js': ['lan.js', 'text/javascript; charset=utf-8'], '/style.css': ['style.css', 'text/css; charset=utf-8'], '/favicon.svg': ['favicon.svg', 'image/svg+xml'] };
 const assets = {};
 for (const [route, [file, type]] of Object.entries(files)) assets[route] = { body: await readFile(new URL('public/' + file, root), 'utf8'), type };
 const source = await readFile(new URL('worker/api.mjs', root), 'utf8');
 const worker = source.replace('export async function api', 'async function api') + '\nconst assets = ' + JSON.stringify(assets) + `;
 export default { async fetch(request, env) {
   const url = new URL(request.url);
+  if (url.pathname.startsWith('/api/lan/')) return Response.json({error:'请使用局域网 Node 服务'}, {status:501});
   if (url.pathname.startsWith('/api/')) return api(request, env);
   const asset = assets[url.pathname];
   if (!asset) return new Response('Not found', {status:404});
@@ -16,7 +17,7 @@ export default { async fetch(request, env) {
     'Cache-Control':'no-cache',
     'X-Content-Type-Options':'nosniff',
     'Referrer-Policy':'same-origin',
-    'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'"
+    'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'"
   }});
 }};
 `;

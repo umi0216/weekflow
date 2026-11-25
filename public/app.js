@@ -1,7 +1,16 @@
+import { createLanPanel } from '/lan.js';
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const icons = {
+  message: '<path d="M21 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/>',
+  file: '<path d="m9 12 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l8-8M7 14l8-8"/>',
+  screen: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4m0-13v6m-3-3 3-3 3 3"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+  send: '<path d="m3 10 18-7-7 18-3-8Zm8 3L21 3"/>',
+  download: '<path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/>',
+  refresh: '<path d="M20 7v5h-5M4 17v-5h5M6 6a8 8 0 0 1 14 6M4 12a8 8 0 0 0 14 6"/>',
+  expand: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="9" cy="7" r="4"/>',
@@ -46,6 +55,7 @@ const store = {
   set(key, value) { try { localStorage.setItem('weekflow.' + key, JSON.stringify(value)); } catch {} }
 };
 const state = { members: [], tasks: [], selected: store.get('member', 'all'), query: '', week: 'all', group: store.get('group', true), view: store.get('view', 'board'), collapsed: new Set(), demo: false, loading: true, error: '', pending: new Set(), drawer: false, sidebarCollapsed: store.get('sidebarCollapsed', false) === true };
+const lan = createLanPanel({ isDemo: () => state.demo, icon, esc });
 const sidebarMedia = window.matchMedia('(max-width: 700px)');
 let realData = null, clickTimer = null, toastTimer = null, dialogCleanup = null, dialogFocus = null, liveBusy = 0;
 const monday = value => { const d = new Date(value); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; };
@@ -96,12 +106,13 @@ function render() {
       <button class="icon-btn sidebar-help" data-action="help" title="快捷键" aria-label="快捷键">${icon('info')}</button>
     </aside>
     <div class="shell">
-      <header class="topbar"><div class="breadcrumb"><button class="icon-btn sidebar-toggle" data-action="toggle-sidebar" title="切换侧栏" aria-label="切换侧栏" aria-controls="team-sidebar">${icon('panel')}</button>${member ? avatar(member) : ''}<h1 class="heading-title">${member ? esc(member.name) : '全部任务'}</h1>${member ? `<button class="icon-btn" data-action="edit-member" title="编辑成员" aria-label="编辑成员">${icon('more')}</button>` : ''}</div><div class="topbar-right">${state.members.length ? `<button class="primary-btn" data-action="add-task" title="新建任务 · N">${icon('plus')}新建</button>` : ''}</div></header>
+      <header class="topbar"><div class="breadcrumb"><button class="icon-btn sidebar-toggle" data-action="toggle-sidebar" title="切换侧栏" aria-label="切换侧栏" aria-controls="team-sidebar">${icon('panel')}</button>${member ? avatar(member) : ''}<h1 class="heading-title">${member ? esc(member.name) : '全部任务'}</h1>${member ? `<button class="icon-btn" data-action="edit-member" title="编辑成员" aria-label="编辑成员">${icon('more')}</button>` : ''}</div><div class="topbar-right"><button class="icon-btn messages-toggle" data-action="messages" title="消息" aria-label="消息" aria-controls="lan-panel" aria-expanded="false" ${state.demo?'disabled':''}>${icon('message')}</button>${state.members.length ? `<button class="primary-btn" data-action="add-task" title="新建任务 · N">${icon('plus')}新建</button>` : ''}</div></header>
       ${state.demo ? `<div class="demo-banner"><span>示例</span><button data-action="exit-demo" title="退出示例" aria-label="退出示例">${icon('close')}</button></div>` : ''}
       <main class="main" id="main" tabindex="-1">${mainContent()}</main>
     </div>`;
   bindApp();
   syncSidebar();
+  lan.syncButton();
 }
 function syncSidebar() {
   const sidebar = $('#team-sidebar');
@@ -197,6 +208,7 @@ function handleAction(action) {
   else if(action==='edit-member')memberDialog(currentMember());
   else if(action==='add-task')taskDialog();
   else if(action==='help')helpDialog();
+  else if(action==='messages')lan.open();
   else if(action==='retry')refresh();
   else if(action==='demo')startDemo();
   else if(action==='exit-demo')exitDemo();
@@ -310,6 +322,7 @@ function helpDialog() {
   dialog(`${dialogHeading('快捷键')}<ul class="shortcut-list"><li><span>新建</span><kbd>N</kbd></li><li><span>搜索</span><kbd>/</kbd></li><li><span>编辑</span><kbd>Enter / 单击</kbd></li><li><span>推进</span><kbd>⌘ Ctrl + Enter / 双击</kbd></li><li><span>保存</span><kbd>⌘ Ctrl + Enter</kbd></li><li><span>关闭</span><kbd>Esc</kbd></li></ul>`);
 }
 function startDemo() {
+  lan.reset();
   realData={members:state.members,tasks:state.tasks,selected:state.selected};state.demo=true;
   const now=new Date();
   const day=(offset,hour=10)=>{const d=new Date(now);d.setDate(d.getDate()+offset);d.setHours(hour,20,0,0);return d.toISOString()};
@@ -330,7 +343,7 @@ function startDemo() {
   state.tasks=seeds.map(([title,description,status,priority,offset,memberId],i)=>({id:'demo-task-'+i,memberId,title,description,status,priority,createdAt:day(offset,9+(i%5)),updatedAt:day(0),completedAt:status==='done'?day(0):null,version:1}));
   state.selected='demo-lin';state.query='';state.week='all';state.collapsed.clear();render();
 }
-function exitDemo() {if(!realData)return;Object.assign(state,realData);realData=null;state.demo=false;state.query='';state.week='all';state.collapsed.clear();render();refresh(true)}
+function exitDemo() {if(!realData)return;Object.assign(state,realData);realData=null;state.demo=false;state.query='';state.week='all';state.collapsed.clear();render();refresh(true);lan.start()}
 document.addEventListener('keydown',e=>{
   if($('#overlay-root').children.length||e.ctrlKey||e.metaKey||e.altKey||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)||e.target.isContentEditable)return;
   if(e.key.toLowerCase()==='n'){e.preventDefault();taskDialog()}
@@ -340,4 +353,4 @@ document.addEventListener('keydown',e=>{
 window.addEventListener('focus',()=>refresh(true));
 sidebarMedia.addEventListener('change',()=>{state.drawer=false;syncSidebar()});
 setInterval(()=>{if(!document.hidden)refresh(true)},20000);
-render();refresh();
+render();refresh();lan.start();
