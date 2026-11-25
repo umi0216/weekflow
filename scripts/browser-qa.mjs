@@ -35,7 +35,7 @@ try{
   const a=await createMember('QA 林小满');
   await click('[data-action="add-task"]');await fill('#task-form [name="title"]','评审交互方案');await fill('#task-form [name="description"]','需要完成可编辑的任务流程。\n同时检查创建时间。');await fill('#task-form [name="priority"]','high');await evaluate(`document.querySelector('#task-form').requestSubmit()`);
   await until(`!!document.querySelector('.todo .task-card') && !document.querySelector('#task-form')`,'new todo');
-  assert.ok(await evaluate(`document.querySelector('.card-time').textContent.trim().length>5`));
+  assert.ok(await evaluate(`document.querySelector('.card-time').textContent.trim().length>4`));
   const rect=await evaluate(`(()=>{const r=document.querySelector('.task-card .task-title').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
   for(const clickCount of [1,2]){await cdp('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount,...rect});await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount,...rect});await delay(70)}
   await until(`!!document.querySelector('.progress .task-card')`,'double click advances');await delay(400);assert.equal(await evaluate(`!!document.querySelector('.dialog')`),false);
@@ -52,9 +52,9 @@ try{
   console.log('PASS: editing, safe text rendering, member isolation, reload, search, list view');
   await evaluate(`(()=>{const card=document.querySelector('.task-card');const data=new DataTransfer();data.setData('text/plain',card.dataset.task);document.querySelector('.done').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:data}));})()`);
   await until(`!!document.querySelector('.done .task-card')`,'drag to completed');
-  await click('.card-edit');assert.ok(await evaluate(`document.querySelector('.task-meta').textContent.includes('完成于')`));await click('#delete-task');await click('#cancel-delete');await until(`!!document.querySelector('#task-form')`,'cancel deletion returns to task');await click('#delete-task');await click('#confirm-delete');await until(`!document.querySelector('.dialog') && !document.querySelector('.task-card')`,'delete task');
+  await click('.card-edit');assert.ok(await evaluate(`document.querySelector('.task-meta').textContent.includes('完成')`));await click('#delete-task');await click('#cancel-delete');await until(`!!document.querySelector('#task-form')`,'cancel deletion returns to task');await click('#delete-task');await click('#confirm-delete');await until(`!document.querySelector('.dialog') && !document.querySelector('.task-card')`,'delete task');
   console.log('PASS: drag across stages, completion timestamp, deletion confirmation and cancellation');
-  await click('[data-action="overview"]');assert.equal(await evaluate(`document.querySelectorAll('.member-card').length`),2);
+  await click('[data-action="overview"]');assert.equal(await evaluate(`document.querySelectorAll('.member-nav').length`),2);
   await evaluate(`localStorage.removeItem('weekflow.member');localStorage.removeItem('weekflow.view')`);
   // Clean up only the two members created by this test, preserving all other records.
   for(const id of knownMembers)await fetch('http://127.0.0.1:4173/api/members/'+id,{method:'DELETE'});knownMembers=[];

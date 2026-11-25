@@ -29,16 +29,17 @@ const icons = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.01"/>',
   spark: '<path d="m12 3 2.3 6.7L21 12l-6.7 2.3L12 21l-2.3-6.7L3 12l6.7-2.3L12 3Z"/>',
   empty: '<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M9 3h6v4H9zM8 12h8m-8 4h5"/>',
+  note: '<path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3M9 8h10M9 12h7M9 16h4"/>',
   enter: '<path d="M20 4v9a3 3 0 0 1-3 3H4m4-4-4 4 4 4"/>'
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${icons[name] || icons.grid}</svg>`;
 const statuses = [
-  { id: 'todo', title: '待办', en: 'To do', empty: '给新的想法留个位置', next: '开始处理' },
-  { id: 'progress', title: '进行中', en: 'In progress', empty: '一次专注做好一件事', next: '提交检查' },
-  { id: 'review', title: '待检查', en: 'Review', empty: '好成果，值得再看一眼', next: '标记完成' },
-  { id: 'done', title: '已完成', en: 'Done', empty: '每一份完成，都算数', next: null }
+  { id: 'todo', title: '待办', next: '开始处理' },
+  { id: 'progress', title: '进行中', next: '提交检查' },
+  { id: 'review', title: '待检查', next: '标记完成' },
+  { id: 'done', title: '已完成', next: null }
 ];
-const priorities = { high: '高优先级', normal: '普通', low: '低优先级' };
+const priorities = { high: '高', normal: '普通', low: '低' };
 const colorNames = { sage: '草木绿', blue: '晴空蓝', rose: '樱花粉', amber: '暖杏黄', violet: '丁香紫', slate: '雾灰色' };
 const store = {
   get(key, fallback) { try { return JSON.parse(localStorage.getItem('weekflow.' + key)) ?? fallback; } catch { return fallback; } },
@@ -50,15 +51,15 @@ let realData = null, clickTimer = null, toastTimer = null, dialogCleanup = null,
 const monday = value => { const d = new Date(value); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d; };
 const dateKey = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const weekKey = value => dateKey(monday(value));
-const localDate = (value, time = false) => new Date(value).toLocaleString('zh-CN', time ? { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false } : { month: 'numeric', day: 'numeric' });
+const shortDate = value => { const d = new Date(value); return `${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`; };
 const fullDate = value => new Date(value).toLocaleString('zh-CN', { year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false });
 function weekInfo(key) {
   const start = new Date(key + 'T12:00:00'), end = new Date(start); end.setDate(end.getDate() + 6);
   const todayKey = weekKey(new Date()), last = monday(new Date()); last.setDate(last.getDate()-7);
-  const title = key === todayKey ? '本周' : key === dateKey(last) ? '上周' : `${start.getMonth()+1} 月 ${start.getDate()} 日这周`;
+  const title = key === todayKey ? '本周' : key === dateKey(last) ? '上周' : `${start.getMonth()+1}.${start.getDate()}`;
   const crossYear = start.getFullYear() !== new Date().getFullYear() || start.getFullYear() !== end.getFullYear();
   const range = `${crossYear ? start.getFullYear()+'.' : ''}${String(start.getMonth()+1).padStart(2,'0')}.${String(start.getDate()).padStart(2,'0')} — ${start.getFullYear() !== end.getFullYear() ? end.getFullYear()+'.' : ''}${String(end.getMonth()+1).padStart(2,'0')}.${String(end.getDate()).padStart(2,'0')}`;
-  return { title, range, current: key === todayKey };
+  return { title, range };
 }
 const currentMember = () => state.members.find(m => m.id === state.selected);
 const memberFor = id => state.members.find(m => m.id === id);
@@ -88,19 +89,16 @@ function render() {
   $('#app').innerHTML = `
     <div class="drawer-shade ${state.drawer ? 'open' : ''}" data-action="close-drawer"></div>
     <aside id="team-sidebar" class="sidebar ${state.drawer ? 'open' : ''}" aria-label="团队导航">
-      <div class="sidebar-heading"><a class="brand" href="#" data-action="overview"><img src="/favicon.svg" alt="" width="36" height="36"><span><strong>同频</strong><small>WEEKFLOW</small></span></a><button class="icon-btn sidebar-close" data-action="close-sidebar" title="收起侧栏" aria-label="收起侧栏" aria-controls="team-sidebar">${icon('panel')}</button></div>
-      <div class="workspace-switch"><span class="workspace-icon">${icon('building')}</span><span><strong>我们的工作空间</strong><small>一点一滴，一起向前</small></span></div>
-      <p class="sidebar-label">WORKSPACE</p>
-      <button class="nav-item ${!member ? 'active' : ''}" data-action="overview" ${!member ? 'aria-current="page"' : ''}>${icon('grid')}<span>团队总览</span><span class="nav-count">${state.members.length}</span></button>
-      <div class="member-label"><p class="sidebar-label">成员空间 <span style="letter-spacing:0">${state.members.length ? '· '+state.members.length : ''}</span></p><button class="icon-btn" data-action="add-member" title="创建成员" aria-label="创建成员">${icon('plus')}</button></div>
-      <nav class="member-list" aria-label="成员空间">${state.members.map(m => `<button class="nav-item member-nav ${state.selected===m.id?'active':''}" data-member="${esc(m.id)}" ${state.selected===m.id?'aria-current="page"':''}>${avatar(m)}<span class="member-name">${esc(m.name)}</span><span class="nav-num">${state.tasks.filter(t=>t.memberId===m.id&&t.status!=='done').length}</span></button>`).join('') || '<p class="empty-members">还没有成员。<br>为一起工作的人建个空间吧。</p>'}</nav>
-      <button class="sidebar-add" data-action="add-member">${icon('plus')}添加成员</button>
-      <div class="sidebar-bottom"><div class="little-note">${icon('leaf')}<strong>小步向前，也很好。</strong><p>把事情记下来，<br>给专注留一点空间。</p></div><div class="internal-tag">${icon('lock')} 团队内部工作空间</div></div>
+      <div class="sidebar-heading"><a class="brand" href="#" data-action="overview"><img src="/favicon.svg" alt="" width="28" height="28"><strong>同频</strong></a><button class="icon-btn sidebar-close" data-action="close-sidebar" title="收起侧栏" aria-label="收起侧栏" aria-controls="team-sidebar">${icon('panel')}</button></div>
+      <button class="nav-item ${!member ? 'active' : ''}" data-action="overview" ${!member ? 'aria-current="page"' : ''}>${icon('grid')}<span>全部</span><span class="nav-count">${state.tasks.filter(t=>t.status!=='done').length || ''}</span></button>
+      <div class="member-label"><span>成员</span><button class="icon-btn" data-action="add-member" title="添加成员" aria-label="添加成员">${icon('plus')}</button></div>
+      <nav class="member-list" aria-label="成员">${state.members.map(m => `<button class="nav-item member-nav ${state.selected===m.id?'active':''}" data-member="${esc(m.id)}" title="${esc([m.name,m.role].filter(Boolean).join(' · '))}" ${state.selected===m.id?'aria-current="page"':''}>${avatar(m)}<span class="member-name">${esc(m.name)}</span><span class="nav-num">${state.tasks.filter(t=>t.memberId===m.id&&t.status!=='done').length || ''}</span></button>`).join('')}</nav>
+      <button class="icon-btn sidebar-help" data-action="help" title="快捷键" aria-label="快捷键">${icon('info')}</button>
     </aside>
     <div class="shell">
-      <header class="topbar"><div class="breadcrumb"><button class="icon-btn sidebar-toggle" data-action="toggle-sidebar" title="切换侧栏" aria-label="切换侧栏" aria-controls="team-sidebar">${icon('panel')}</button><span>工作空间</span><span class="slash">/</span><strong>${member ? esc(member.name) + ' 的空间' : '团队总览'}</strong></div><div class="topbar-right"><span class="today">${icon('calendar')}${new Date().toLocaleDateString('zh-CN',{month:'long',day:'numeric',weekday:'long'})}</span><button class="help-btn" data-action="help" title="使用说明" aria-label="使用说明">?</button><span class="topbar-avatar" title="团队工作空间">${icon('users')}</span></div></header>
-      ${state.demo ? `<div class="demo-banner"><span>${icon('info')}正在浏览示例，操作不会影响真实数据。</span><button data-action="exit-demo">回到真实空间</button></div>` : ''}
-      <main class="main" id="main" tabindex="-1">${mainContent(member)}</main>
+      <header class="topbar"><div class="breadcrumb"><button class="icon-btn sidebar-toggle" data-action="toggle-sidebar" title="切换侧栏" aria-label="切换侧栏" aria-controls="team-sidebar">${icon('panel')}</button>${member ? avatar(member) : ''}<h1 class="heading-title">${member ? esc(member.name) : '全部任务'}</h1>${member ? `<button class="icon-btn" data-action="edit-member" title="编辑成员" aria-label="编辑成员">${icon('more')}</button>` : ''}</div><div class="topbar-right">${state.members.length ? `<button class="primary-btn" data-action="add-task" title="新建任务 · N">${icon('plus')}新建</button>` : ''}</div></header>
+      ${state.demo ? `<div class="demo-banner"><span>示例</span><button data-action="exit-demo" title="退出示例" aria-label="退出示例">${icon('close')}</button></div>` : ''}
+      <main class="main" id="main" tabindex="-1">${mainContent()}</main>
     </div>`;
   bindApp();
   syncSidebar();
@@ -121,50 +119,41 @@ function syncSidebar() {
   toggle.title = expanded ? '收起侧栏' : '展开侧栏';
   if (!expanded && hadFocus) toggle.focus();
 }
-function mainContent(member) {
-  if (state.loading) return '<div class="boot" style="height:50vh">正在整理团队空间…</div>';
-  if (state.error) return `<div class="error-panel">${icon('info')}<h2>暂时无法打开工作空间</h2><p>${esc(state.error)}</p><button class="primary-btn" data-action="retry">重新连接</button></div>`;
-  const tasks = memberTasks(), doneWeek = tasks.filter(t=>t.status==='done'&&t.completedAt&&weekKey(t.completedAt)===weekKey(new Date())).length;
-  return `<div class="page-heading"><div>${member ? `<div class="space-identity">${avatar(member)}<div><span class="heading-eyebrow">PERSONAL WORKSPACE</span><div class="space-title-line"><h1 class="heading-title">${esc(member.name)} 的空间</h1><button class="icon-btn" data-action="edit-member" title="编辑成员" aria-label="编辑成员">${icon('more')}</button></div></div></div><p class="heading-subtitle">${member.role ? esc(member.role) + ' · ' : ''}把想做的事，慢慢变成已完成。</p>` : `<span class="heading-eyebrow">A LITTLE PROGRESS, EVERY WEEK</span><h1 class="heading-title">一起工作，同步向前<span style="color:#9cb38b">。</span></h1><p class="heading-subtitle">每个人的专注，汇成团队的进步。<span class="accent">${state.members.length ? '今天，也把事情做好一点。' : '从创建第一个成员开始。'}</span></p>`}</div><div class="heading-actions">${member || state.members.length ? `<button class="primary-btn" data-action="add-task">${icon('plus')}新建任务</button>` : `<button class="primary-btn" data-action="add-member">${icon('plus')}创建成员</button>`}</div></div>
-    ${!state.members.length ? welcome() : `<section class="stats" aria-label="工作概况">${stat('empty','全部任务',tasks.length,'件','每一件都有着落')}${stat('progress','正在进行',tasks.filter(t=>t.status==='progress').length,'件','保持专注的节奏','blue-icon')}${stat('done','本周完成',doneWeek,'件','让进步看得见','green-icon')}</section>
-    ${!member ? memberOverview() : ''}
-    <div class="workspace-toolbar"><div class="view-tabs" role="tablist" aria-label="任务视图"><button class="view-tab ${state.view==='board'?'active':''}" role="tab" aria-selected="${state.view==='board'}" data-view="board">${icon('board')}任务看板</button><button class="view-tab ${state.view==='list'?'active':''}" role="tab" aria-selected="${state.view==='list'}" data-view="list">${icon('list')}列表视图</button></div><div class="toolbar-filters"><label class="search-box">${icon('search')}<input id="task-search" type="search" aria-label="搜索任务" placeholder="搜索任务…" value="${esc(state.query)}" maxlength="120"></label><label class="filter-select"><select id="week-filter" aria-label="筛选创建周">${weekOptions()}</select>${icon('chevron')}</label><button class="group-toggle" id="group-toggle" aria-pressed="${state.group}" title="按任务创建时间分组"><span class="switch"></span>按周分组</button></div></div>
-    <div id="board-content">${boardContent()}</div>
-    <footer class="board-footer"><span class="board-hint">${icon('mouse')}双击推进状态 · 单击编辑 · 支持拖动卡片</span><span class="footer-mark">一步一件事 · 一周一点进步</span></footer>`}`;
+function mainContent() {
+  if (state.loading) return '<div class="boot" role="status" aria-label="加载中"><span class="loading-mark"></span></div>';
+  if (state.error) return `<div class="error-panel">${icon('info')}<p>${esc(state.error)}</p><button class="secondary-btn" data-action="retry">重试</button></div>`;
+  if (!state.members.length) return welcome();
+  return `<div class="workspace-toolbar"><div class="view-tabs" role="group" aria-label="任务视图"><button class="view-tab ${state.view==='board'?'active':''}" aria-pressed="${state.view==='board'}" data-view="board" title="看板" aria-label="看板">${icon('board')}</button><button class="view-tab ${state.view==='list'?'active':''}" aria-pressed="${state.view==='list'}" data-view="list" title="列表" aria-label="列表">${icon('list')}</button></div><div class="toolbar-filters"><label class="search-box">${icon('search')}<input id="task-search" type="search" aria-label="搜索任务" placeholder="搜索" value="${esc(state.query)}" maxlength="120"><kbd aria-hidden="true">/</kbd></label><label class="filter-select"><select id="week-filter" aria-label="筛选创建周">${weekOptions()}</select>${icon('chevron')}</label><button class="group-toggle" id="group-toggle" aria-pressed="${state.group}" title="按周分组" aria-label="按周分组">${icon('calendar')}</button></div></div>
+    <div id="board-content">${boardContent()}</div>`;
 }
-function stat(symbol, label, value, unit, note, cls='') { return `<div class="stat-card"><span class="stat-icon ${cls}">${icon(symbol)}</span><div class="stat-data"><p class="stat-label">${label}</p><p class="stat-value">${value}<small>${unit}</small></p></div><span class="stat-note">${note}</span></div>`; }
 function welcome() {
-  return `<section class="welcome"><div><p class="welcome-kicker">留一点空间，给正在发生的好事</p><h2>让每一件事，<br><span>稳稳向前。</span></h2><p>为团队里的每个人建一个小空间，<br>记下待办，专注当下，再一起庆祝完成。</p><div class="welcome-actions"><button class="primary-btn" data-action="add-member">${icon('plus')}创建第一个成员</button><button class="text-btn" data-action="demo">看看示例</button></div></div><div class="welcome-visual" aria-hidden="true"><div class="mini-board"><div class="mini-title"></div><div class="mini-columns"><div class="mini-col"><div class="mini-line"></div><div class="mini-card"></div><div class="mini-card"></div></div><div class="mini-col"><div class="mini-line"></div><div class="mini-card"></div></div><div class="mini-col"><div class="mini-line"></div><div class="mini-card"></div><div class="mini-card"></div></div></div></div><div class="floating-done">${icon('check')}又一件事，完成了</div></div></section>
-  <section class="welcome-steps" aria-label="开始使用"><article class="welcome-step"><div class="step-icon">${icon('users')}</div><h3>一个人，一个空间</h3><p>先创建成员，再进入专属空间。<br>每个人的事情，一目了然。</p></article><article class="welcome-step"><div class="step-icon">${icon('board')}</div><h3>从待办，走到完成</h3><p>写下任务，双击向前推进。<br>简单四步，留下每一次进展。</p></article><article class="welcome-step"><div class="step-icon">${icon('calendar')}</div><h3>按周整理，有条不紊</h3><p>创建时间自动记录，按周分层。<br>回看这一周，也看见成长。</p></article></section><p class="welcome-footnote">轻一点的工具，装下认真做事的日常。</p>`;
-}
-function memberOverview() {
-  return `<div class="section-title"><h2>每个人的小进展</h2><span>${state.members.length} 位成员 · 点击进入个人空间</span></div><section class="overview-members" aria-label="成员概况">${state.members.map(m=>{const tasks=state.tasks.filter(t=>t.memberId===m.id), done=tasks.filter(t=>t.status==='done').length, percent=tasks.length?Math.round(done/tasks.length*100):0;return `<button class="member-card" data-member="${esc(m.id)}"><div class="member-card-top">${avatar(m)}<span><strong>${esc(m.name)}</strong><span class="role" style="display:block">${esc(m.role||'团队成员')}</span></span></div><div class="member-card-stats"><span><b>${tasks.length-done}</b> 件待推进</span><span>已完成 ${done}/${tasks.length}</span></div><div class="progress-track" aria-hidden="true"><span style="width:${percent}%"></span></div></button>`}).join('')}</section>`;
+  return `<section class="welcome"><button class="primary-btn" data-action="add-member">${icon('plus')}添加成员</button><button class="text-btn" data-action="demo">示例</button></section>`;
 }
 function weekOptions() {
   const weeks = [...new Set(memberTasks().map(t=>weekKey(t.createdAt)))].sort().reverse();
   if (!weeks.includes(weekKey(new Date()))) weeks.unshift(weekKey(new Date()));
-  return `<option value="all">全部周次</option>${weeks.map(key=>{const w=weekInfo(key);return `<option value="${key}" ${state.week===key?'selected':''}>${w.title} · ${w.range}</option>`}).join('')}`;
+  return `<option value="all">全部周</option>${weeks.map(key=>{const w=weekInfo(key);return `<option value="${key}" ${state.week===key?'selected':''}>${w.title}</option>`}).join('')}`;
 }
 function boardContent() {
   const tasks = visibleTasks();
-  if (!tasks.length && (state.query || state.week !== 'all')) return `<div class="filter-empty">${icon('search')}<h3>没有找到匹配的任务</h3><p>换一个关键词或周次试试看。</p><button class="secondary-btn" data-action="clear-filters">清除筛选</button></div>`;
+  if (!tasks.length && (state.query || state.week !== 'all')) return `<div class="filter-empty">${icon('search')}<button class="text-btn" data-action="clear-filters">清除筛选</button></div>`;
   const groups = state.group ? [...new Set(tasks.map(t=>weekKey(t.createdAt)))].sort().reverse().map(key=>({key,tasks:tasks.filter(t=>weekKey(t.createdAt)===key)})) : [{key:'all',tasks}];
   if (!groups.length) groups.push({key:weekKey(new Date()),tasks:[]});
   return groups.map(({key,tasks})=>{
     const info = key==='all'?null:weekInfo(key), collapsed=state.collapsed.has(key);
-    return `<section class="week-section" aria-label="${info?info.title:'全部任务'}">${info?`<div class="week-header"><button class="week-collapse" data-collapse="${key}" aria-expanded="${!collapsed}" aria-label="${collapsed?'展开':'收起'}${info.title}">${icon('chevron')}<span class="week-title">${info.title}</span></button><span class="week-range">${info.range}</span>${info.current?'<span class="week-badge">这一周</span>':''}<span class="week-line"></span><span class="week-total">${tasks.length} 件任务</span></div>`:''}<div ${collapsed?'hidden':''}>${state.view==='board'?kanban(tasks):taskList(tasks)}</div></section>`;
+    return `<section class="week-section" aria-label="${info?info.title:'全部任务'}">${info?`<div class="week-header"><button class="week-collapse" data-collapse="${key}" aria-expanded="${!collapsed}" aria-label="${collapsed?'展开':'收起'}${info.title}">${icon('chevron')}<span class="week-title">${info.title}</span></button><span class="week-range">${info.range}</span><span class="week-line"></span><span class="week-total">${tasks.length}</span></div>`:''}<div ${collapsed?'hidden':''}>${state.view==='board'?kanban(tasks):taskList(tasks)}</div></section>`;
   }).join('');
 }
 function kanban(tasks) {
-  return `<div class="kanban">${statuses.map(s=>{const rows=tasks.filter(t=>t.status===s.id);return `<section class="column ${s.id}" data-status="${s.id}" aria-label="${s.title}"><div class="column-head"><span class="status-symbol">${icon(s.id)}</span><h3 class="column-title">${s.title}<span>${s.en}</span></h3><span class="column-count">${rows.length}</span>${s.id==='todo'?`<button class="icon-btn" data-action="add-task" title="新建待办任务" aria-label="新建待办任务">${icon('plus')}</button>`:''}</div><div class="task-stack">${rows.length?rows.map(card).join(''):`<div class="column-empty">${icon(s.id==='done'?'leaf':'empty')}<p>${s.empty}</p></div>`}</div>${s.id==='todo'?`<button class="column-add" data-action="add-task">${icon('plus')}添加待办</button>`:''}</section>`}).join('')}</div>`;
+  return `<div class="kanban">${statuses.map(s=>{const rows=tasks.filter(t=>t.status===s.id);return `<section class="column ${s.id}" data-status="${s.id}" aria-label="${s.title}"><div class="column-head"><span class="status-symbol">${icon(s.id)}</span><h3 class="column-title">${s.title}</h3><span class="column-count">${rows.length}</span>${s.id==='todo'?`<button class="icon-btn" data-action="add-task" title="新建待办" aria-label="新建待办">${icon('plus')}</button>`:''}</div><div class="task-stack">${rows.map(card).join('')}</div></section>`}).join('')}</div>`;
 }
 function card(task) {
   const m=memberFor(task.memberId), status=statuses.find(s=>s.id===task.status);
-  return `<article class="task-card ${state.pending.has(task.id)?'busy':''}" draggable="true" tabindex="0" data-task="${esc(task.id)}" aria-label="${esc(task.title)}，${status.title}，按 Enter 编辑，双击推进状态"><div class="task-topline"><span class="priority ${task.priority}">${priorities[task.priority]}</span><button class="icon-btn card-edit" data-edit="${esc(task.id)}" title="编辑任务" aria-label="编辑${esc(task.title)}">${icon('edit')}</button></div><h3 class="task-title">${esc(task.title)}</h3>${task.description?`<p class="task-description">${esc(task.description)}</p>`:''}<div class="card-footer"><time class="card-time" datetime="${esc(task.createdAt)}" title="创建于 ${fullDate(task.createdAt)}">${icon('calendar')}${localDate(task.createdAt,true)}</time><span class="card-trailing">${status.next?`<button class="advance-btn" data-advance="${esc(task.id)}" title="${status.next}" aria-label="${status.next}：${esc(task.title)}">${icon(status.id==='todo'?'progress':status.id==='progress'?'review':'check')}</button>`:''}${avatar(m)}</span></div></article>`;
+  return `<article class="task-card ${state.pending.has(task.id)?'busy':''}" draggable="true" tabindex="0" data-task="${esc(task.id)}" aria-label="${esc(task.title)}，${status.title}"><div class="task-topline"><h3 class="task-title">${esc(task.title)}</h3>${task.priority!=='normal'?`<span class="priority ${task.priority}" role="img" title="${priorities[task.priority]}优先级" aria-label="${priorities[task.priority]}优先级"></span>`:''}</div><div class="card-footer"><span class="card-metadata"><time class="card-time" datetime="${esc(task.createdAt)}" title="${fullDate(task.createdAt)}">${shortDate(task.createdAt)}</time>${task.description?`<span class="description-mark" title="${esc(task.description)}" aria-label="有描述">${icon('note')}</span>`:''}</span><span class="card-trailing"><button class="icon-btn card-edit" data-edit="${esc(task.id)}" title="编辑" aria-label="编辑${esc(task.title)}">${icon('edit')}</button>${status.next?`<button class="advance-btn" data-advance="${esc(task.id)}" title="${status.next}" aria-label="${status.next}：${esc(task.title)}">${icon(status.id==='todo'?'progress':status.id==='progress'?'review':'check')}</button>`:''}${state.selected==='all'?avatar(m):''}</span></div></article>`;
 }
 function taskList(tasks) {
-  if (!tasks.length) return `<div class="empty-space"><span class="empty-symbol">${icon('empty')}</span><h2>给想做的事，一个开始</h2><p>新建第一条待办，让这一周有条不紊。</p><button class="primary-btn" data-action="add-task">${icon('plus')}新建任务</button></div>`;
-  return `<div class="list-wrapper"><div class="task-list-row list-head"><span>任务名称</span><span>状态</span><span>成员</span><span>创建时间</span><span></span></div>${tasks.map(t=>{const m=memberFor(t.memberId),s=statuses.find(s=>s.id===t.status);return `<div class="task-list-row"><div class="list-task-title"><span class="priority ${t.priority}" title="${priorities[t.priority]}"></span><button data-edit="${esc(t.id)}">${esc(t.title)}</button></div><span class="status-pill ${t.status}">${icon(t.status)}${s.title}</span><span title="${esc(m?.name||'')}">${avatar(m)}</span><time class="list-date" datetime="${t.createdAt}" title="${fullDate(t.createdAt)}">${localDate(t.createdAt,true)}</time><button class="icon-btn" data-edit="${esc(t.id)}" aria-label="编辑${esc(t.title)}">${icon('more')}</button></div>`}).join('')}</div>`;
+  if (!tasks.length) return `<div class="empty-space"><button class="text-btn" data-action="add-task">${icon('plus')}新建任务</button></div>`;
+  return `<div class="list-wrapper"><div class="task-list-row list-head"><span>任务</span><span>状态</span><span>成员</span><span>创建</span><span></span></div>${tasks.map(t=>{const m=memberFor(t.memberId),s=statuses.find(s=>s.id===t.status);return `<div class="task-list-row"><div class="list-task-title"><span class="priority ${t.priority}" role="img" aria-label="${priorities[t.priority]}优先级" title="${priorities[t.priority]}优先级"></span><button data-edit="${esc(t.id)}">${esc(t.title)}</button></div><span class="status-pill ${t.status}">${icon(t.status)}${s.title}</span><span title="${esc(m?.name||'')}">${avatar(m)}</span><time class="list-date" datetime="${t.createdAt}" title="${fullDate(t.createdAt)}">${shortDate(t.createdAt)}</time><button class="icon-btn" data-edit="${esc(t.id)}" aria-label="编辑${esc(t.title)}">${icon('more')}</button></div>`}).join('')}</div>`;
 }
 function selectMember(id) {
   state.selected=id; state.query='';state.week='all';state.drawer=false;state.collapsed.clear();
@@ -218,7 +207,7 @@ function handleAction(action) {
 function advanceTask(id) {
   const task=state.tasks.find(t=>t.id===id);if(!task)return;
   const i=statuses.findIndex(s=>s.id===task.status);
-  if(i===3){toast('这件事已完成，做得不错。');return}
+  if(i===3)return;
   moveTask(id,statuses[i+1].id);
 }
 async function moveTask(id, status) {
@@ -229,7 +218,7 @@ async function moveTask(id, status) {
     if(state.demo)updated={...task,status,updatedAt:new Date().toISOString(),completedAt:status==='done'?new Date().toISOString():null,version:task.version+1};
     else updated=await request('/tasks/'+id,'PATCH',{status,version:task.version});
     state.tasks=state.tasks.map(t=>t.id===id?updated:t);state.pending.delete(id);render();
-    toast(status==='done'?'又一件事，完成了。':`已移至「${statuses.find(s=>s.id===status).title}」`,()=>moveTask(id,old));
+    toast(statuses.find(s=>s.id===status).title,()=>moveTask(id,old));
   } catch(error) {state.pending.delete(id);toast(error.message,null,true);if(error.status===409){liveBusy--;await refresh();liveBusy++}else renderBoard()}
   finally{liveBusy--}
 }
@@ -265,32 +254,30 @@ const dialogHeading = title => `<div class="dialog-heading"><h2 id="dialog-title
 function formError(form, message) {const el=$('.form-error',form);el.textContent=message;el.hidden=false;el.scrollIntoView({block:'nearest'})}
 function memberDialog(member) {
   let color=member?.color||Object.keys(colorNames)[state.members.length%6];
-  dialog(`${dialogHeading(member?'编辑成员':'添加一位伙伴')}<p class="dialog-subtitle">${member?'让大家更容易认出你。':'每个人，都值得拥有一个专注的小空间。'}</p><form id="member-form"><div class="member-preview">${avatar(member||{name:'新',color})}</div><label class="field"><span>成员姓名 <span aria-hidden="true">*</span></span><input name="name" required maxlength="30" placeholder="怎么称呼这位伙伴？" value="${esc(member?.name||'')}" autocomplete="off" autofocus></label><label class="field"><span>团队角色 <small style="display:inline">（选填）</small></span><input name="role" maxlength="40" placeholder="例如：产品设计、前端开发" value="${esc(member?.role||'')}"></label><span class="field-label">选一个喜欢的颜色</span><div class="color-options" role="radiogroup" aria-label="头像颜色">${Object.entries(colorNames).map(([id,name])=>`<button type="button" class="color-option ${id}" role="radio" aria-checked="${id===color}" aria-label="${name}" title="${name}" data-color="${id}">${id===color?icon('check'):''}</button>`).join('')}</div><p class="form-error" role="alert" hidden></p><div class="dialog-footer">${member?`<button type="button" class="danger-btn" id="delete-member">${icon('trash')}删除成员</button>`:''}<button type="button" class="secondary-btn" data-close>取消</button><button class="primary-btn" type="submit">${member?'保存修改':'创建并进入空间'}</button></div></form>`);
+  dialog(`${dialogHeading(member?'编辑成员':'添加成员')}<form id="member-form"><label class="field"><span>姓名</span><input name="name" required maxlength="30" value="${esc(member?.name||'')}" autocomplete="off" autofocus></label><label class="field"><span>角色</span><input name="role" maxlength="40" value="${esc(member?.role||'')}"></label><div class="color-options" role="radiogroup" aria-label="头像颜色">${Object.entries(colorNames).map(([id,name])=>`<button type="button" class="color-option ${id}" role="radio" aria-checked="${id===color}" aria-label="${name}" title="${name}" data-color="${id}">${id===color?icon('check'):''}</button>`).join('')}</div><p class="form-error" role="alert" hidden></p><div class="dialog-footer">${member?`<button type="button" class="danger-btn" id="delete-member" title="删除成员" aria-label="删除成员">${icon('trash')}</button>`:''}<button type="button" class="secondary-btn" data-close>取消</button><button class="primary-btn" type="submit">${member?'保存':'添加'}</button></div></form>`);
   const form=$('#member-form'),name=form.elements.name;
-  function preview(){const m={name:name.value.trim()||'新',color};$('.member-preview').innerHTML=avatar(m)}
-  name.oninput=preview;
-  $$('[data-color]').forEach(el=>{el.onclick=()=>{color=el.dataset.color;$$('[data-color]').forEach(b=>{b.setAttribute('aria-checked',b.dataset.color===color);b.innerHTML=b.dataset.color===color?icon('check'):''});preview()};el.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const options=$$('[data-color]'),i=options.indexOf(el),target=options[(i+(e.key==='ArrowRight'?1:5))%6];target.click();target.focus()}}});
+  $$('[data-color]').forEach(el=>{el.onclick=()=>{color=el.dataset.color;$$('[data-color]').forEach(b=>{b.setAttribute('aria-checked',b.dataset.color===color);b.innerHTML=b.dataset.color===color?icon('check'):''})};el.onkeydown=e=>{if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const options=$$('[data-color]'),i=options.indexOf(el),target=options[(i+(e.key==='ArrowRight'?1:5))%6];target.click();target.focus()}}});
   if(member)$('#delete-member').onclick=()=>deleteMemberDialog(member);
   form.onsubmit=async e=>{
-    e.preventDefault();const submit=$('[type=submit]',form);if(submit.disabled)return;submit.disabled=true;submit.textContent='正在保存…';liveBusy++;
+    e.preventDefault();const submit=$('[type=submit]',form);if(submit.disabled)return;submit.disabled=true;submit.textContent='保存中';liveBusy++;
     try{
       const data={name:name.value.trim(),role:form.elements.role.value.trim(),color};if(!data.name)throw new Error('请填写成员姓名');
       let result;
       if(state.demo){if(state.members.some(m=>m.name.toLowerCase()===data.name.toLowerCase()&&m.id!==member?.id))throw new Error('这个成员已存在');result={...data,id:member?.id||crypto.randomUUID(),createdAt:member?.createdAt||new Date().toISOString()}}
       else result=await request('/members'+(member?'/'+member.id:''),member?'PATCH':'POST',data);
       if(member)state.members=state.members.map(m=>m.id===member.id?result:m);else state.members.push(result);
-      submit.disabled=false;closeDialog();selectMember(result.id);toast(member?'成员资料已更新':`已为 ${result.name} 建好空间，开始记录第一件事吧。`);
-    }catch(error){formError(form,error.message);submit.disabled=false;submit.textContent=member?'保存修改':'创建并进入空间'}finally{liveBusy--}
+      submit.disabled=false;closeDialog();selectMember(result.id);
+    }catch(error){formError(form,error.message);submit.disabled=false;submit.textContent=member?'保存':'添加'}finally{liveBusy--}
   };
 }
 function taskDialog(task) {
   if(!state.members.length){memberDialog();return}
   const editing=Boolean(task), member=editing?memberFor(task.memberId):currentMember();
-  dialog(`${dialogHeading(editing?'任务详情':'记下一件要做的事')}<p class="dialog-subtitle">${editing?'认真记录，让每一步进展都有迹可循。':'先放进待办里，再一步一步把它做好。'}</p><form id="task-form"><label class="field"><span>任务标题 <span aria-hidden="true">*</span></span><input name="title" required maxlength="120" placeholder="这次，想完成什么？" value="${esc(task?.title||'')}" autocomplete="off" autofocus></label><label class="field"><span>任务描述 <small style="display:inline">（选填）</small></span><textarea name="description" maxlength="4000" placeholder="补充一点背景、想法，或需要注意的细节…">${esc(task?.description||'')}</textarea></label><div class="field-row"><label class="field"><span>所属成员</span><span class="filter-select"><select name="memberId" ${editing?'disabled':''} aria-label="所属成员">${state.members.map(m=>`<option value="${esc(m.id)}" ${member?.id===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select>${icon('chevron')}</span></label><label class="field"><span>优先级</span><span class="filter-select"><select name="priority" aria-label="任务优先级">${Object.entries(priorities).map(([id,title])=>`<option value="${id}" ${(task?.priority||'normal')===id?'selected':''}>${title}</option>`).join('')}</select>${icon('chevron')}</span></label></div>${editing?`<label class="field"><span>当前状态</span><span class="filter-select"><select name="status" aria-label="当前状态">${statuses.map(s=>`<option value="${s.id}" ${s.id===task.status?'selected':''}>${s.title} · ${s.en}</option>`).join('')}</select>${icon('chevron')}</span></label><div class="task-meta"><span>${icon('calendar')}创建于 ${fullDate(task.createdAt)}</span><span>${icon('clock')}更新于 ${fullDate(task.updatedAt)}</span>${task.completedAt?`<span>${icon('done')}完成于 ${fullDate(task.completedAt)}</span>`:''}</div>`:`<div class="task-meta"><span>${icon('info')}新任务会自动进入「待办」，并记录当前创建时间。</span></div>`}<p class="form-error" role="alert" hidden></p><div class="dialog-footer">${editing?`<button type="button" class="danger-btn" id="delete-task">${icon('trash')}删除任务</button>`:''}<button type="button" class="secondary-btn" data-close>取消</button><button class="primary-btn" type="submit">${editing?'保存修改':'添加到待办'}</button></div></form>`,{wide:true});
+  dialog(`${dialogHeading(editing?'任务':'新建任务')}<form id="task-form"><label class="field"><span>标题</span><input name="title" required maxlength="120" value="${esc(task?.title||'')}" autocomplete="off" autofocus></label><label class="field"><span>描述</span><textarea name="description" maxlength="4000">${esc(task?.description||'')}</textarea></label><div class="field-row"><label class="field"><span>成员</span><span class="filter-select"><select name="memberId" ${editing?'disabled':''} aria-label="所属成员">${state.members.map(m=>`<option value="${esc(m.id)}" ${member?.id===m.id?'selected':''}>${esc(m.name)}</option>`).join('')}</select>${icon('chevron')}</span></label><label class="field"><span>优先级</span><span class="filter-select"><select name="priority" aria-label="任务优先级">${Object.entries(priorities).map(([id,title])=>`<option value="${id}" ${(task?.priority||'normal')===id?'selected':''}>${title}</option>`).join('')}</select>${icon('chevron')}</span></label></div>${editing?`<label class="field"><span>状态</span><span class="filter-select"><select name="status" aria-label="当前状态">${statuses.map(s=>`<option value="${s.id}" ${s.id===task.status?'selected':''}>${s.title}</option>`).join('')}</select>${icon('chevron')}</span></label><details class="task-history"><summary title="时间记录" aria-label="时间记录">${icon('clock')}${icon('chevron')}</summary><div class="task-meta"><span>创建 ${fullDate(task.createdAt)}</span><span>更新 ${fullDate(task.updatedAt)}</span>${task.completedAt?`<span>完成 ${fullDate(task.completedAt)}</span>`:''}</div></details>`:''}<p class="form-error" role="alert" hidden></p><div class="dialog-footer">${editing?`<button type="button" class="danger-btn" id="delete-task" title="删除任务" aria-label="删除任务">${icon('trash')}</button>`:''}<button type="button" class="secondary-btn" data-close>取消</button><button class="primary-btn" type="submit">${editing?'保存':'创建'}</button></div></form>`,{wide:true});
   const form=$('#task-form');if(editing)$('#delete-task').onclick=()=>deleteTaskDialog(task);
   form.onkeydown=e=>{if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();form.requestSubmit()}};
   form.onsubmit=async e=>{
-    e.preventDefault();const submit=$('[type=submit]',form);if(submit.disabled)return;submit.disabled=true;submit.textContent='正在保存…';liveBusy++;
+    e.preventDefault();const submit=$('[type=submit]',form);if(submit.disabled)return;submit.disabled=true;submit.textContent='保存中';liveBusy++;
     try{
       const data={title:form.elements.title.value.trim(),description:form.elements.description.value.trim(),priority:form.elements.priority.value};if(!data.title)throw new Error('请填写任务标题');
       if(editing){data.status=form.elements.status.value;data.version=task.version}else data.memberId=form.elements.memberId.value;
@@ -298,29 +285,29 @@ function taskDialog(task) {
       if(state.demo){const now=new Date().toISOString();result=editing?{...task,...data,updatedAt:now,completedAt:data.status==='done'?(task.completedAt||now):null,version:task.version+1}:{...data,id:crypto.randomUUID(),status:'todo',createdAt:now,updatedAt:now,completedAt:null,version:1}}
       else result=await request('/tasks'+(editing?'/'+task.id:''),editing?'PATCH':'POST',data);
       if(editing)state.tasks=state.tasks.map(t=>t.id===task.id?result:t);else {state.tasks.unshift(result);state.week='all';state.query='';state.collapsed.delete(weekKey(result.createdAt))}
-      submit.disabled=false;closeDialog();render();toast(editing?'修改已保存':'已添加到待办，给它一个好的开始。');
-    }catch(error){formError(form,error.message);submit.disabled=false;submit.textContent=editing?'保存修改':'添加到待办';if(error.status===409){const fresh=await request('/state').catch(()=>null);if(fresh){state.members=fresh.members;state.tasks=fresh.tasks;const latest=state.tasks.find(t=>t.id===task.id);if(latest){task.version=latest.version;formError(form,'任务已更新。你的输入已保留，请确认后再次保存。')}else{submit.disabled=true;formError(form,'这条任务已被删除，请关闭窗口。')}}}}
+      submit.disabled=false;closeDialog();render();
+    }catch(error){formError(form,error.message);submit.disabled=false;submit.textContent=editing?'保存':'创建';if(error.status===409){const fresh=await request('/state').catch(()=>null);if(fresh){state.members=fresh.members;state.tasks=fresh.tasks;const latest=state.tasks.find(t=>t.id===task.id);if(latest){task.version=latest.version;formError(form,'任务已更新。你的输入已保留，请确认后再次保存。')}else{submit.disabled=true;formError(form,'这条任务已被删除，请关闭窗口。')}}}}
     finally{liveBusy--}
   };
 }
 function confirmDialog(title,message,onConfirm,onCancel) {
-  dialog(`${dialogHeading(title)}<p class="confirm-message">${message}</p><p class="form-error" role="alert" hidden></p><div class="dialog-footer"><button class="secondary-btn" id="cancel-delete">取消</button><button class="primary-btn confirm-danger" type="submit" id="confirm-delete">确认删除</button></div>`);
+  dialog(`${dialogHeading(title)}<p class="confirm-message">${message}</p><p class="form-error" role="alert" hidden></p><div class="dialog-footer"><button class="secondary-btn" id="cancel-delete">取消</button><button class="primary-btn confirm-danger" type="submit" id="confirm-delete">删除</button></div>`);
   $('#cancel-delete').onclick=()=>onCancel?onCancel():closeDialog();
-  $('#confirm-delete').onclick=async()=>{const b=$('#confirm-delete');b.disabled=true;b.textContent='正在删除…';liveBusy++;try{await onConfirm();b.disabled=false;closeDialog();render()}catch(error){$('.form-error').hidden=false;$('.form-error').textContent=error.message;b.disabled=false;b.textContent='确认删除'}finally{liveBusy--}};
+  $('#confirm-delete').onclick=async()=>{const b=$('#confirm-delete');b.disabled=true;b.textContent='删除中';liveBusy++;try{await onConfirm();b.disabled=false;closeDialog();render()}catch(error){$('.form-error').hidden=false;$('.form-error').textContent=error.message;b.disabled=false;b.textContent='删除'}finally{liveBusy--}};
 }
 function deleteTaskDialog(task) {
-  confirmDialog('删除这条任务？',`「${esc(task.title)}」会被永久删除。`,async()=>{if(!state.demo)await request('/tasks/'+task.id,'DELETE',{version:task.version});state.tasks=state.tasks.filter(t=>t.id!==task.id);toast('任务已删除')},()=>taskDialog(task));
+  confirmDialog('删除任务？',`「${esc(task.title)}」`,async()=>{if(!state.demo)await request('/tasks/'+task.id,'DELETE',{version:task.version});state.tasks=state.tasks.filter(t=>t.id!==task.id);toast('已删除')},()=>taskDialog(task));
 }
 function deleteMemberDialog(member) {
   const count=state.tasks.filter(t=>t.memberId===member.id).length;
-  confirmDialog('删除这位成员？',`将删除 ${esc(member.name)} 的空间${count?`及其中的 ${count} 条任务`:''}。此操作无法撤销。`,async()=>{if(!state.demo)await request('/members/'+member.id,'DELETE');state.members=state.members.filter(m=>m.id!==member.id);state.tasks=state.tasks.filter(t=>t.memberId!==member.id);state.selected='all';store.set('member','all');toast('成员空间已删除')},()=>memberDialog(member));
+  confirmDialog('删除成员？',`${esc(member.name)}${count?` · ${count} 条任务`:''}`,async()=>{if(!state.demo)await request('/members/'+member.id,'DELETE');state.members=state.members.filter(m=>m.id!==member.id);state.tasks=state.tasks.filter(t=>t.memberId!==member.id);state.selected='all';store.set('member','all');toast('已删除')},()=>memberDialog(member));
 }
 function helpDialog() {
-  dialog(`${dialogHeading('简单一点，也能做好')}<p class="dialog-subtitle">几个小操作，找到适合自己的工作节奏。</p><ul class="shortcut-list"><li><span>查看并编辑任务</span><kbd>单击卡片 / Enter</kbd></li><li><span>推进到下一个状态</span><kbd>双击卡片</kbd></li><li><span>自由调整任务状态</span><kbd>拖动卡片 / 编辑状态</kbd></li><li><span>快速新建任务</span><kbd>N</kbd></li><li><span>搜索当前空间</span><kbd>/</kbd></li><li><span>保存正在编辑的任务</span><kbd>Ctrl / ⌘ + Enter</kbd></li><li><span>关闭弹窗</span><kbd>Esc</kbd></li></ul><p class="help-description">任务会按创建时间归入对应的一周，跨周推进状态也会保留原来的归属。使用右侧的「按周分组」开关，可以随时切换查看方式。</p><div class="dialog-footer"><button class="primary-btn" data-close>知道了</button></div>`);
+  dialog(`${dialogHeading('快捷键')}<ul class="shortcut-list"><li><span>新建</span><kbd>N</kbd></li><li><span>搜索</span><kbd>/</kbd></li><li><span>编辑</span><kbd>Enter / 单击</kbd></li><li><span>推进</span><kbd>⌘ Ctrl + Enter / 双击</kbd></li><li><span>保存</span><kbd>⌘ Ctrl + Enter</kbd></li><li><span>关闭</span><kbd>Esc</kbd></li></ul>`);
 }
 function startDemo() {
   realData={members:state.members,tasks:state.tasks,selected:state.selected};state.demo=true;
-  const now=new Date(),last=new Date(now);last.setDate(last.getDate()-7);
+  const now=new Date();
   const day=(offset,hour=10)=>{const d=new Date(now);d.setDate(d.getDate()+offset);d.setHours(hour,20,0,0);return d.toISOString()};
   state.members=[{id:'demo-lin',name:'林小满',role:'产品设计',color:'sage',createdAt:day(-20)},{id:'demo-zhou',name:'周亦舟',role:'前端开发',color:'blue',createdAt:day(-20)},{id:'demo-chen',name:'陈可',role:'内容运营',color:'rose',createdAt:day(-18)}];
   const seeds=[
